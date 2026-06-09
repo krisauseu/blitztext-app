@@ -6,7 +6,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
     case transcription
     case localTranscription
     case textImprover
-    case dampfAblassen
+    case translation
     case emojiText
 
     var id: String { rawValue }
@@ -20,7 +20,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .transcription: return "Blitztext"
         case .localTranscription: return "Blitztext Lokal"
         case .textImprover: return "Blitztext+"
-        case .dampfAblassen: return "Blitztext $%&!"
+        case .translation: return "Blitztext Translate"
         case .emojiText: return "Blitztext :)"
         }
     }
@@ -30,7 +30,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .transcription: return "mic.fill"
         case .localTranscription: return "lock.shield.fill"
         case .textImprover: return "text.badge.checkmark"
-        case .dampfAblassen: return "flame.fill"
+        case .translation: return "globe"
         case .emojiText: return "face.smiling"
         }
     }
@@ -40,7 +40,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .transcription: return "Sprache rein. Text raus."
         case .localTranscription: return "Nur lokal. Kein Server."
         case .textImprover: return "Geschrieben sprechen."
-        case .dampfAblassen: return "Frust rein. Entspannt raus."
+        case .translation: return "Lokal erkannt. Per API übersetzt."
         case .emojiText: return "Text rein. Emojis dazu."
         }
     }
@@ -50,7 +50,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .transcription: return "fn + Shift"
         case .localTranscription: return "fn + Shift + Ctrl"
         case .textImprover: return "fn + Control"
-        case .dampfAblassen: return "fn + Option"
+        case .translation: return "fn + Option"
         case .emojiText: return "fn + Cmd"
         }
     }
@@ -60,7 +60,7 @@ enum WorkflowType: String, CaseIterable, Identifiable, Codable {
         case .transcription: return "blue"
         case .localTranscription: return "green"
         case .textImprover: return "purple"
-        case .dampfAblassen: return "orange"
+        case .translation: return "green"
         case .emojiText: return "cyan"
         }
     }
@@ -161,20 +161,45 @@ struct AppSettings: Codable {
     }
 }
 
-enum TranscriptionBackend: String, Codable {
-    case remote
-    case local
-}
-
 // MARK: - Workflow Settings
 
 struct TranscriptionSettings: Codable {
-    var language: String = "de"
+    var language: String = ""
 }
 
-struct DampfAblassenSettings: Codable {
-    var systemPrompt: String = "Du erhältst ein emotional gesprochenes Transkript. Erkenne zuerst das eigentliche Ziel, Anliegen und den wahren Frust der Person. Formuliere daraus eine klare, respektvolle und wirksame Nachricht, mit der die Person ihr Ziel eher erreicht. Bewahre relevante Fakten, konkrete Probleme, Grenzen, Erwartungen und die nötige Dringlichkeit. Entferne Beleidigungen, Drohungen, Sarkasmus, Unterstellungen und unnötige Eskalation. Wenn mehrere Vorwürfe genannt werden, verdichte sie auf die entscheidenden Kernpunkte. Der Ton soll ruhig, menschlich, bestimmt und lösungsorientiert sein. Gib NUR die fertige Nachricht zurück."
+struct TranslationSettings: Codable {
+    var targetLanguage: TargetLanguage = .spanish
     var customName: String = ""
+
+    enum TargetLanguage: String, Codable, CaseIterable, Identifiable {
+        case spanish
+        case french
+        case norwegian
+        case english
+        case german
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .spanish: return "Spanisch"
+            case .french: return "Französisch"
+            case .norwegian: return "Norwegisch"
+            case .english: return "Englisch"
+            case .german: return "Deutsch"
+            }
+        }
+
+        var promptName: String {
+            switch self {
+            case .spanish: return "Spanisch"
+            case .french: return "Französisch"
+            case .norwegian: return "Norwegisch (Bokmål)"
+            case .english: return "Englisch"
+            case .german: return "Deutsch"
+            }
+        }
+    }
 }
 
 struct EmojiTextSettings: Codable {

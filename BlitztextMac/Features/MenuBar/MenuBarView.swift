@@ -124,13 +124,13 @@ struct MenuBarView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Image(systemName: appState.appSettings.secureLocalModeEnabled ? "lock.shield.fill" : "network")
+                Image(systemName: "lock.shield.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(appState.appSettings.secureLocalModeEnabled ? .green : .blue)
+                    .foregroundStyle(.green)
                     .frame(width: 22, height: 22)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(appState.appSettings.secureLocalModeEnabled ? "Sicherer lokaler Modus" : "Online Whisper")
+                    Text("Lokale Transkription")
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.primary)
 
@@ -142,63 +142,61 @@ struct MenuBarView: View {
                 }
 
                 Spacer(minLength: 4)
+            }
 
-                Toggle("", isOn: Binding(
-                    get: { appState.appSettings.secureLocalModeEnabled },
-                    set: { newValue in
-                        if newValue {
-                            appState.enableSecureLocalMode()
-                        } else {
-                            appState.appSettings.secureLocalModeEnabled = false
-                        }
+            HStack(spacing: 8) {
+                Text("Modell")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Picker("", selection: Binding(
+                    get: { appState.selectedLocalModelName },
+                    set: { appState.appSettings.selectedLocalTranscriptionModelName = $0 }
+                )) {
+                    ForEach(modelOptions) { model in
+                        Text(model.shortDisplayName).tag(model.id)
                     }
-                ))
+                }
                 .labelsHidden()
-                .toggleStyle(.switch)
+                .frame(maxWidth: .infinity)
                 .controlSize(.small)
                 .disabled(appState.isDownloadingLocalModel)
             }
 
-            if appState.appSettings.secureLocalModeEnabled {
-                HStack(spacing: 8) {
-                    Text("Modell")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text("Übersetzen")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
 
-                    Picker("", selection: Binding(
-                        get: { appState.selectedLocalModelName },
-                        set: { appState.appSettings.selectedLocalTranscriptionModelName = $0 }
-                    )) {
-                        ForEach(modelOptions) { model in
-                            Text(model.shortDisplayName).tag(model.id)
-                        }
+                Picker("", selection: $appState.translationSettings.targetLanguage) {
+                    ForEach(TranslationSettings.TargetLanguage.allCases) { language in
+                        Text(language.displayName).tag(language)
                     }
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity)
-                    .controlSize(.small)
-                    .disabled(appState.isDownloadingLocalModel)
                 }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+                .controlSize(.small)
+            }
 
-                if let progress = appState.localModelDownloadProgress {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ProgressView(value: progress)
-                        Text(appState.localModelDownloadStatusText ?? "Modell wird geladen...")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                    }
-                } else if !selectedModelInstalled {
-                    Button(appState.localModelDownloadButtonTitle) {
-                        appState.installSelectedLocalModel()
-                    }
-                    .controlSize(.small)
-                }
-
-                if let errorText = appState.localModelDownloadErrorText {
-                    Text(errorText)
+            if let progress = appState.localModelDownloadProgress {
+                VStack(alignment: .leading, spacing: 4) {
+                    ProgressView(value: progress)
+                    Text(appState.localModelDownloadStatusText ?? "Modell wird geladen...")
                         .font(.system(size: 10.5))
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
                 }
+            } else if !selectedModelInstalled {
+                Button(appState.localModelDownloadButtonTitle) {
+                    appState.installSelectedLocalModel()
+                }
+                .controlSize(.small)
+            }
+
+            if let errorText = appState.localModelDownloadErrorText {
+                Text(errorText)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(10)
@@ -213,17 +211,13 @@ struct MenuBarView: View {
     }
 
     private func modePanelSubtitle(selectedModelInstalled: Bool) -> String {
-        if appState.appSettings.secureLocalModeEnabled {
-            if appState.isDownloadingLocalModel {
-                return appState.localModelDownloadStatusText ?? "Lokales Modell wird geladen."
-            }
-            if selectedModelInstalled {
-                return "Lokal mit \(appState.selectedLocalModelDisplayName)."
-            }
-            return "\(appState.selectedLocalModelDisplayName) ist noch nicht installiert."
+        if appState.isDownloadingLocalModel {
+            return appState.localModelDownloadStatusText ?? "Lokales Modell wird geladen."
         }
-
-        return "Blitztext nutzt gerade die OpenAI-Transkription."
+        if selectedModelInstalled {
+            return "Audio bleibt lokal. API-Funktionen senden nur Text."
+        }
+        return "\(appState.selectedLocalModelDisplayName) ist noch nicht installiert."
     }
 
     private var accessibilityHintBanner: some View {
@@ -607,9 +601,9 @@ struct MenuBarView: View {
                     if let w = workflow as? TextImprovementWorkflow {
                         TextImproverActiveView(workflow: w)
                     }
-                case .dampfAblassen:
-                    if let w = workflow as? DampfAblassenWorkflow {
-                        DampfAblassenActiveView(workflow: w)
+                case .translation:
+                    if let w = workflow as? TranslationWorkflow {
+                        TranslationActiveView(workflow: w)
                     }
                 case .emojiText:
                     if let w = workflow as? EmojiTextWorkflow {
@@ -643,7 +637,7 @@ struct MenuBarView: View {
         case .transcription: return .blue
         case .localTranscription: return .green
         case .textImprover: return .purple
-        case .dampfAblassen: return .orange
+        case .translation: return .green
         case .emojiText: return .cyan
         }
     }
@@ -792,10 +786,10 @@ struct TextImproverActiveView: View {
     }
 }
 
-// MARK: - Rage Mode Active View
+// MARK: - Translation Active View
 
-struct DampfAblassenActiveView: View {
-    @Bindable var workflow: DampfAblassenWorkflow
+struct TranslationActiveView: View {
+    @Bindable var workflow: TranslationWorkflow
 
     var body: some View {
         VStack(spacing: 0) {

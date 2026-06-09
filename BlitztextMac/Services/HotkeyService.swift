@@ -99,11 +99,11 @@ final class HotkeyService {
             return
         }
 
-        // fn + Option -> Rage Mode
+        // fn + Option -> Translate
         if flags == [.function, .option] {
             if activeCombo == nil {
-                activeCombo = .dampfAblassen
-                onHotkeyEvent?(.down(.dampfAblassen))
+                activeCombo = .translation
+                onHotkeyEvent?(.down(.translation))
             }
             return
         }

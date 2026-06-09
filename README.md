@@ -12,7 +12,7 @@ This is a learning and experimentation project, not a polished product.
 
 - **Blitztext**: record speech and transcribe it.
 - **Blitztext+**: record speech, transcribe it, then turn the rough draft into cleaner writing.
-- **Blitztext $%&!**: turn frustrated speech into a calmer message.
+- **Blitztext Translate**: record speech in German or English, transcribe it locally, then translate it with the OpenAI API.
 - **Blitztext :)**: add fitting emojis to dictated text.
 
 ## Important Preview Notes
@@ -20,8 +20,9 @@ This is a learning and experimentation project, not a polished product.
 - macOS only.
 - Bring your own OpenAI API key.
 - No hosted Blitztext backend is included or provided.
-- In online mode, audio and text are sent directly from the app to the OpenAI API.
-- Optional local transcription via WhisperKit/CoreML if you install a compatible model locally.
+- Speech transcription is local-first and uses WhisperKit/CoreML with a user-installed local model.
+- Blitztext+, Blitztext Translate, and Blitztext :) send the locally transcribed text to the OpenAI API for text transformation.
+- Audio is not sent to OpenAI by the built-in workflows after a local model is installed.
 - `./build.sh` creates a locally ad-hoc-signed development app. No notarized release binary is provided.
 - Not production ready.
 - No warranty and no support guarantee.
@@ -48,11 +49,9 @@ The intent is not to ship a one-click finished app. The intent is to make a real
 - macOS 14 or newer
 - Xcode 16 or newer (Swift 5.10), with Command Line Tools installed and selected for `xcodebuild`
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the Xcode project
-- For online transcription and rewriting: an OpenAI API key with access to:
-  - `whisper-1` for transcription
-  - `gpt-4o-mini` and optionally `gpt-4o` for rewriting
-- For local-only transcription: a WhisperKit CoreML model in:
+- For local transcription: a WhisperKit CoreML model in:
   `~/Library/Application Support/Blitztext/models/whisperkit/`
+- For text improvement, translation, and emoji workflows: an OpenAI API key with access to `gpt-4o-mini`
 
 The build also pulls one Swift Package dependency automatically:
 
@@ -80,9 +79,7 @@ For a local install into `/Applications`:
 
 The generated `.app` is ad-hoc signed for local development only. Do not treat it as a trusted redistributable binary. A public binary release would need Developer ID signing and notarization.
 
-On first launch, either paste your own OpenAI API key for online workflows or install a WhisperKit CoreML model for local transcription. Rewriting workflows still require OpenAI.
-
-For fully local transcription, install a WhisperKit CoreML model and enable **Sicherer Lokaler Modus** in the app.
+On first launch, install a WhisperKit CoreML model for local transcription. If you want to use Blitztext+, Blitztext Translate, or Blitztext :), paste your own OpenAI API key in the settings. The API key is only needed for text transformation workflows.
 
 For a slower, more explicit walkthrough, see [docs/setup.md](docs/setup.md).
 
@@ -102,9 +99,10 @@ Full Disk Access is not required. If auto-paste does not work even though transc
 The preview has no custom backend.
 
 ```text
-Online transcription: Your Mac -> OpenAI Audio Transcriptions API
-Text rewriting:       Your Mac -> OpenAI Chat Completions API
-Local transcription:  Your Mac -> WhisperKit/CoreML on device
+Transcription:        Your Mac -> WhisperKit/CoreML on device
+Text improvement:     Your Mac -> OpenAI Chat Completions API
+Translation:          Your Mac -> OpenAI Chat Completions API
+Emoji text:           Your Mac -> OpenAI Chat Completions API
 ```
 
 The app stores your OpenAI API key in the user's macOS Keychain.
@@ -125,7 +123,7 @@ docs/           Setup, privacy, roadmap, preflight, landing page notes
 
 ## Local Models
 
-Local transcription is available as an experimental WhisperKit/CoreML path. The app does not bundle a model; choose one in the app, click install, and then switch on **Sicherer Lokaler Modus** from the menu bar or settings.
+Local transcription is the default path. The app does not bundle a model; choose one in the app and click install. The menu bar UI lets you select the local WhisperKit model used for all dictation workflows.
 
 See [docs/local-models.md](docs/local-models.md).
 

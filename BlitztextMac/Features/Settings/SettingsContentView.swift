@@ -16,13 +16,19 @@ struct SettingsContentView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
 
-            ScrollView {
-                if selectedTab == 0 {
-                    CustomizeSettingsView(appState: appState)
-                } else {
-                    AccessSettingsView(appState: appState)
+            GeometryReader { geometry in
+                ScrollView {
+                    if selectedTab == 0 {
+                        CustomizeSettingsView(appState: appState)
+                            .frame(width: geometry.size.width, alignment: .leading)
+                    } else {
+                        AccessSettingsView(appState: appState)
+                            .frame(width: geometry.size.width, alignment: .leading)
+                    }
                 }
+                .frame(width: geometry.size.width)
             }
+            .frame(maxWidth: .infinity)
         }
         .onAppear {
             appState.refreshAccessibilityPermission()
@@ -146,9 +152,16 @@ struct AccessSettingsView: View {
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11.5))
                             .focused($focusedField, equals: .openAIAPIKey)
+                            .onSubmit {
+                                saveAPIKeyFromField()
+                            }
 
-                        Button("Einfuegen") {
-                            pasteAPIKeyFromClipboard()
+                        Button(apiKeyActionTitle) {
+                            if openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                pasteAPIKeyFromClipboard()
+                            } else {
+                                saveAPIKeyFromField()
+                            }
                         }
                         .buttonStyle(SubtleButtonStyle())
                     }
@@ -355,6 +368,7 @@ struct AccessSettingsView: View {
             }
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             launchAtLoginService.refresh()
             refreshInstallState()
@@ -370,6 +384,12 @@ struct AccessSettingsView: View {
         openAIAPIKey = ""
     }
 
+    private var apiKeyActionTitle: String {
+        openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Einfuegen"
+            : "Speichern"
+    }
+
     private func save() {
         saveErrorText = nil
         cleanupStatusText = nil
@@ -378,26 +398,58 @@ struct AccessSettingsView: View {
         let trimmedAPIKey = openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if editingAPIKey || !appState.hasValue(for: .openAIAPIKey) {
-            guard !trimmedAPIKey.isEmpty else {
-                saveErrorText = "Bitte trage deinen OpenAI API Key ein."
+            guard saveAPIKey(trimmedAPIKey) else {
                 return
             }
-            do {
-                try KeychainService.save(key: .openAIAPIKey, value: trimmedAPIKey)
-                openAIAPIKey = ""
-                editingAPIKey = false
-            } catch {
-                saveErrorText = "OpenAI API Key konnte nicht gespeichert werden."
-                return
-            }
+        }
+
+        showSavedConfirmation()
+    }
+
+    private func saveAPIKeyFromField() {
+        saveErrorText = nil
+        cleanupStatusText = nil
+        cleanupErrorText = nil
+        guard saveAPIKey(openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return
+        }
+        showSavedConfirmation()
+    }
+
+    @discardableResult
+    private func saveAPIKey(_ trimmedAPIKey: String) -> Bool {
+        guard !trimmedAPIKey.isEmpty else {
+            saveErrorText = "Bitte trage deinen OpenAI API Key ein."
+            return false
+        }
+
+        guard trimmedAPIKey.range(of: Self.openAIAPIKeyPattern, options: .regularExpression) != nil else {
+            saveErrorText = "Bitte trage einen plausiblen OpenAI API Key ein."
+            return false
+        }
+
+        do {
+            try KeychainService.save(key: .openAIAPIKey, value: trimmedAPIKey)
+        } catch {
+            saveErrorText = "OpenAI API Key konnte nicht gespeichert werden."
+            return false
         }
 
         KeychainService.invalidateCache()
-        if !appState.hasValue(for: .openAIAPIKey) {
+        appState.refreshCredentialStatus()
+        guard appState.hasValue(for: .openAIAPIKey) else {
             saveErrorText = "OpenAI API Key wurde nicht persistent gespeichert. Bitte App neu starten und erneut versuchen."
-            return
+            return false
         }
 
+        openAIAPIKey = ""
+        editingAPIKey = false
+        focusedField = nil
+        saveErrorText = nil
+        return true
+    }
+
+    private func showSavedConfirmation() {
         withAnimation(.easeInOut(duration: 0.2)) { saved = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeInOut(duration: 0.2)) { saved = false }
@@ -417,9 +469,11 @@ struct AccessSettingsView: View {
             return
         }
 
-        openAIAPIKey = trimmedKey
+        guard saveAPIKey(trimmedKey) else {
+            return
+        }
         NSPasteboard.general.clearContents()
-        saveErrorText = nil
+        showSavedConfirmation()
     }
 
     private var installationHeadline: String {
@@ -482,6 +536,7 @@ struct AccessSettingsView: View {
             openAIAPIKey = ""
             editingAPIKey = true
         }
+        appState.refreshCredentialStatus()
 
         if report.failedItems.isEmpty {
             cleanupStatusText = deleteLocalDataOnCleanup
@@ -525,17 +580,9 @@ struct CustomizeSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
 
-            // MARK: Lokaler Modus
+            // MARK: Lokale Transkription
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Sicherer Lokaler Modus")
-
-                Toggle("Sicherer Lokaler Modus", isOn: $appState.appSettings.secureLocalModeEnabled)
-                    .toggleStyle(.switch)
-                    .onChange(of: appState.appSettings.secureLocalModeEnabled) { _, newValue in
-                        if newValue && !appState.selectedLocalModelIsInstalled {
-                            appState.installSelectedLocalModel()
-                        }
-                    }
+                SectionLabel(text: "Lokale Transkription")
 
                 HStack(spacing: 6) {
                     Image(systemName: appState.selectedLocalModelIsInstalled ? "checkmark.circle.fill" : "arrow.down.circle.fill")
@@ -681,32 +728,21 @@ struct CustomizeSettingsView: View {
                 }
             }
 
-            // MARK: Blitztext $%&!
+            // MARK: Blitztext Translate
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Blitztext $%&!")
+                SectionLabel(text: "Blitztext Translate")
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Eigene Anweisung")
+                    Text("Zielsprache")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                    TextEditor(text: $appState.dampfAblassenSettings.systemPrompt)
-                        .font(.system(size: 11))
-                        .frame(height: 80)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
-                        .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
-                        .overlay(alignment: .topLeading) {
-                            if appState.dampfAblassenSettings.systemPrompt.isEmpty {
-                                Text("z.B. \"Formuliere den Text sachlich und freundlich um.\"")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.quaternary)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 12)
-                                    .allowsHitTesting(false)
-                            }
+                    Picker("", selection: $appState.translationSettings.targetLanguage) {
+                        ForEach(TranslationSettings.TargetLanguage.allCases) { language in
+                            Text(language.displayName).tag(language)
                         }
+                    }
+                    .pickerStyle(.segmented)
                 }
             }
 
@@ -782,6 +818,7 @@ struct CustomizeSettingsView: View {
 
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func addTerm() {

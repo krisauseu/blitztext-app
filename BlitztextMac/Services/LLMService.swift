@@ -81,16 +81,16 @@ enum LLMService {
         )
     }
 
-    static func dampfAblassen(
+    static func translate(
         text: String,
-        systemPrompt: String,
-        model: RewriteModel = .rageMode
+        targetLanguage: TranslationSettings.TargetLanguage,
+        model: RewriteModel = .fastEdit
     ) async throws -> String {
         try await complete(
             text: text,
-            systemPrompt: systemPrompt,
+            systemPrompt: buildTranslationSystemPrompt(targetLanguage: targetLanguage),
             model: model,
-            temperature: 0.4
+            temperature: 0.2
         )
     }
 
@@ -168,6 +168,16 @@ enum LLMService {
         }
 
         return "Du erhaeltst ein gesprochenes Transkript. Gib den Text moeglichst originalgetreu zurueck, aber fuege passende Emojis ein. \(densityInstruction) Korrigiere offensichtliche Sprach- und Grammatikfehler. Behalte den Stil und die Bedeutung bei. Gib NUR den Text mit Emojis zurueck, keine Erklaerungen."
+    }
+
+    private static func buildTranslationSystemPrompt(targetLanguage: TranslationSettings.TargetLanguage) -> String {
+        """
+        Du erhaeltst ein gesprochenes Transkript, meist auf Deutsch oder Englisch.
+        Uebersetze den Text nach \(targetLanguage.promptName).
+        Korrigiere offensichtliche Transkriptions-, Grammatik- und Zeichensetzungsfehler, ohne Bedeutung, Ton oder Absicht zu veraendern.
+        Erhalte Absätze, Listen, Anreden, Namen, Produktnamen und Fachbegriffe so sinnvoll wie moeglich.
+        Gib NUR die fertige Uebersetzung zurueck, keine Erklaerungen.
+        """
     }
 
     private static func buildSystemPrompt(settings: TextImprovementSettings) -> String {
