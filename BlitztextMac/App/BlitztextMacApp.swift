@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 @main
 struct BlitztextMacApp: App {
@@ -16,15 +17,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let menuBarStatusController = MenuBarStatusController()
+    private let logger = Logger(subsystem: "app.blitztext.mac", category: "AppLifecycle")
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.autosaveName = "app.blitztext.mac.statusItem"
+        statusItem.isVisible = true
 
         if let button = statusItem.button {
             menuBarStatusController.attach(to: button)
             button.action = #selector(togglePopover)
             button.target = self
+            logger.info("Blitztext status item created. visible=\(self.statusItem.isVisible), hasButton=true")
+        } else {
+            logger.error("Blitztext status item was created without a status bar button")
         }
 
         popover = NSPopover()
