@@ -147,11 +147,8 @@ Code is released under the MIT License. See [LICENSE](LICENSE).
 
 Project names, logos, and app icons are not automatically granted as trademarks or brand assets. See [TRADEMARKS.md](TRADEMARKS.md).
 
-## Legal / Impressum & Datenschutz
+## Legal / Disclaimer
 
-This is an experimental, non-commercial open-source project, provided as-is under the MIT License without warranty or support. Nothing is sold here and no installation or operation is performed on your behalf.
+This is a private, experimental, and non-commercial open-source fork. It is provided as-is under the MIT License without any warranty, liability, or support guarantees. 
 
-The companion website (blitztext.de) is operated by Blackboat Internet GmbH:
-
-- Impressum: https://www.blackboat.com/impressum
-- Datenschutz / Privacy: https://www.blackboat.com/datenschutz
+This fork is not affiliated with, operated by, or endorsed by Blackboat Internet GmbH or the original creators of the Blitztext App. No data is collected by the maintainer of this fork.
