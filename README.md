@@ -1,30 +1,28 @@
-# Blitztext App
+# Blitztext App (Offline-First Fork)
 
-Blitztext App is an experimental open-source macOS menubar app for turning speech into text.
+This is a modified fork of the original [Blitztext App by cmagnussen](https://github.com/cmagnussen/blitztext-app). 
 
-It is intentionally small and unfinished. The goal is to make a real workflow visible and hackable: press a hotkey, speak, get text back, optionally rewrite it, and paste it into the app you were using.
+In this version, **all speech transcription has been moved entirely offline** to maximize speed and eliminate API latency on Apple Silicon Macs. The optional OpenAI API is now exclusively used for smart text transformations and translations.
 
-This is a learning and experimentation project, not a polished product.
+## What It Does
 
-> Preview status: bring your own OpenAI API key, no hosted backend, no warranty, no support guarantee.
+- **Blitztext**: Record speech and transcribe it 100% locally using WhisperKit/CoreML.
+- **Blitztext+**: Record speech, transcribe it locally, then use an LLM API to clean up the rough draft.
+- **Blitztext Translate (New)**: Record speech, transcribe it locally, and instantly translate it into a target language of your choice (e.g., Norwegian, French, Spanish, etc.) via API before pasting.
 
 ## What It Does
 
 - **Blitztext**: record speech and transcribe it.
 - **Blitztext+**: record speech, transcribe it, then turn the rough draft into cleaner writing.
-- **Blitztext Translate**: record speech in German or English, transcribe it locally, then translate it with the OpenAI API.
+- **Blitztext Translate**: Record speech, transcribe it locally, and instantly translate it into a target language via the OpenAI API. You can select the destination language directly from the menu bar dropdown before triggering the workflow.
 - **Blitztext :)**: add fitting emojis to dictated text.
 
 ## Important Preview Notes
 
-- macOS only.
-- Bring your own OpenAI API key.
-- No hosted Blitztext backend is included or provided.
-- Speech transcription is local-first and uses WhisperKit/CoreML with a user-installed local model.
-- Blitztext+, Blitztext Translate, and Blitztext :) send the locally transcribed text to the OpenAI API for text transformation.
-- Audio is not sent to OpenAI by the built-in workflows after a local model is installed.
-- `./build.sh` creates a locally ad-hoc-signed development app. No notarized release binary is provided.
-- Not production ready.
+- macOS only (optimized for Apple Silicon M-series chips).
+- **100% Local Transcription:** Audio transcription is exclusively performed on-device using WhisperKit/CoreML. No audio data or raw transcriptions are sent to OpenAI for the base workflow.
+- **Optional API Features:** An OpenAI API key is only required if you use the advanced workflows (Blitztext+ or the Translator).
+- `./build.sh` creates a locally ad-hoc-signed development app.- Not production ready.
 - No warranty and no support guarantee.
 
 You are welcome to use, fork, adapt, and share this project under the license terms.
@@ -94,16 +92,11 @@ If you do not grant Accessibility permission, you can still copy results manuall
 
 Full Disk Access is not required. If auto-paste does not work even though transcription succeeds, open **System Settings -> Privacy & Security -> Accessibility**, enable Blitztext there, restart Blitztext, and try again with the cursor focused in a text field. If macOS shows multiple Blitztext entries, remove or disable the old ones and grant the permission to the app you just built or installed.
 
-## Data Flow
+##Data Flow in this Fork:
 
-The preview has no custom backend.
-
-```text
-Transcription:        Your Mac -> WhisperKit/CoreML on device
-Text improvement:     Your Mac -> OpenAI Chat Completions API
-Translation:          Your Mac -> OpenAI Chat Completions API
-Emoji text:           Your Mac -> OpenAI Chat Completions API
-```
+Transcription:        Your Mac (Voice) -> WhisperKit/CoreML (On-Device) -> Local Text
+Text Improvement:     Local Text -> OpenAI Chat Completions API -> Refined Text
+Translation:          Local Text -> OpenAI Chat Completions API -> Translated Text
 
 The app stores your OpenAI API key in the user's macOS Keychain.
 
@@ -127,6 +120,15 @@ Local transcription is the default path. The app does not bundle a model; choose
 
 See [docs/local-models.md](docs/local-models.md).
 
+## Customizing the Translator
+
+By default, the menu bar dropdown supports **German, English, French, Spanish, and Norwegian**. 
+
+Since Blitztext is designed to be fully hackable, adding your own target language is straightforward. If you want to add another language (e.g., Italian or Japanese), simply open the source code, locate the language array in the menu bar feature view, add your desired language to the list, and rebuild the app using:
+
+```bash
+./build.sh --install --run
+```
 ## Contributing
 
 Contributions are welcome, especially if they make the preview easier to build, understand, or fork.
