@@ -61,7 +61,7 @@ final class AppState {
 
     // Computed
     var isConfigured: Bool {
-        !LocalTranscriptionService.installedModels().isEmpty
+        KeychainService.hasGeminiKey || !LocalTranscriptionService.installedModels().isEmpty
     }
     var shouldShowOnboarding: Bool {
         !isConfigured && !appSettings.hasSeenOnboarding
@@ -103,10 +103,17 @@ final class AppState {
     func workflowSubtitle(for type: WorkflowType) -> String {
         switch type {
         case .transcription:
-            let modelName = selectedLocalModelName
-            return LocalTranscriptionService.isModelInstalled(modelName)
-                ? "Lokal: \(LocalTranscriptionModel.displayName(for: modelName))."
-                : "Lokales WhisperKit-Modell fehlt."
+            switch appSettings.transcriptionBackend {
+            case .gemini:
+                return KeychainService.hasGeminiKey
+                    ? "Online: Gemini 3.5 Transcribe."
+                    : "Gemini API Key fehlt."
+            case .local:
+                let modelName = selectedLocalModelName
+                return LocalTranscriptionService.isModelInstalled(modelName)
+                    ? "Lokal: \(LocalTranscriptionModel.displayName(for: modelName))."
+                    : "Lokales WhisperKit-Modell fehlt."
+            }
         case .localTranscription:
             return "Nur lokal. Kein Server."
         case .translation:
@@ -161,7 +168,9 @@ final class AppState {
         switch type {
         case .transcription:
             let workflow = TranscriptionWorkflow(
-                language: "",
+                customTerms: textImprovementSettings.customTerms,
+                language: transcriptionSettings.language,
+                backend: appSettings.transcriptionBackend,
                 localModelName: selectedLocalModelName
             )
             configureWorkflowHandlers(workflow)
@@ -171,7 +180,9 @@ final class AppState {
         case .localTranscription:
             let workflow = TranscriptionWorkflow(
                 type: .localTranscription,
-                language: "",
+                customTerms: textImprovementSettings.customTerms,
+                language: transcriptionSettings.language,
+                backend: .local,
                 localModelName: selectedLocalModelName
             )
             configureWorkflowHandlers(workflow)
@@ -181,7 +192,8 @@ final class AppState {
         case .textImprover:
             let workflow = TextImprovementWorkflow(
                 settings: textImprovementSettings,
-                language: "",
+                language: transcriptionSettings.language,
+                backend: appSettings.transcriptionBackend,
                 localModelName: selectedLocalModelName
             )
             configureWorkflowHandlers(workflow)
@@ -191,7 +203,8 @@ final class AppState {
         case .translation:
             let workflow = TranslationWorkflow(
                 settings: translationSettings,
-                language: "",
+                language: transcriptionSettings.language,
+                backend: appSettings.transcriptionBackend,
                 localModelName: selectedLocalModelName
             )
             configureWorkflowHandlers(workflow)
@@ -201,7 +214,8 @@ final class AppState {
         case .emojiText:
             let workflow = EmojiTextWorkflow(
                 settings: emojiTextSettings,
-                language: "",
+                language: transcriptionSettings.language,
+                backend: appSettings.transcriptionBackend,
                 localModelName: selectedLocalModelName
             )
             configureWorkflowHandlers(workflow)
@@ -214,13 +228,21 @@ final class AppState {
 
     func isWorkflowAvailable(_ type: WorkflowType) -> Bool {
         _ = credentialRefreshToken
+        let isTranscriptionReady: Bool
+        switch appSettings.transcriptionBackend {
+        case .gemini:
+            isTranscriptionReady = KeychainService.hasGeminiKey
+        case .local:
+            isTranscriptionReady = selectedLocalModelIsInstalled
+        }
+
         switch type {
         case .localTranscription:
             return selectedLocalModelIsInstalled
         case .transcription:
-            return selectedLocalModelIsInstalled
+            return isTranscriptionReady
         case .textImprover, .translation, .emojiText:
-            return selectedLocalModelIsInstalled && KeychainService.isConfigured
+            return isTranscriptionReady && KeychainService.hasOpenAIKey
         }
     }
 

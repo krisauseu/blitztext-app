@@ -114,12 +114,29 @@ protocol Workflow: AnyObject, Observable {
     func reset()
 }
 
+// MARK: - Transcription Backend
+
+enum TranscriptionBackend: String, Codable, CaseIterable, Identifiable {
+    case gemini = "gemini"
+    case local = "local"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .gemini: return "Gemini 3.5 Transcribe"
+        case .local: return "Lokal (WhisperKit)"
+        }
+    }
+}
+
 // MARK: - App Settings
 
 struct AppSettings: Codable {
     var hotkeyMode: HotkeyMode = .hold
     var hasSeenOnboarding: Bool = false
     var secureLocalModeEnabled: Bool = false
+    var transcriptionBackend: TranscriptionBackend = .gemini
     var selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName
     var hasAutoSelectedFastLocalModel: Bool = false
 
@@ -127,12 +144,14 @@ struct AppSettings: Codable {
         hotkeyMode: HotkeyMode = .hold,
         hasSeenOnboarding: Bool = false,
         secureLocalModeEnabled: Bool = false,
+        transcriptionBackend: TranscriptionBackend = .gemini,
         selectedLocalTranscriptionModelName: String = LocalTranscriptionService.recommendedFastModelName,
         hasAutoSelectedFastLocalModel: Bool = false
     ) {
         self.hotkeyMode = hotkeyMode
         self.hasSeenOnboarding = hasSeenOnboarding
         self.secureLocalModeEnabled = secureLocalModeEnabled
+        self.transcriptionBackend = transcriptionBackend
         self.selectedLocalTranscriptionModelName = selectedLocalTranscriptionModelName
         self.hasAutoSelectedFastLocalModel = hasAutoSelectedFastLocalModel
     }
@@ -141,6 +160,7 @@ struct AppSettings: Codable {
         case hotkeyMode
         case hasSeenOnboarding
         case secureLocalModeEnabled
+        case transcriptionBackend
         case selectedLocalTranscriptionModelName
         case hasAutoSelectedFastLocalModel
     }
@@ -150,6 +170,7 @@ struct AppSettings: Codable {
         hotkeyMode = try container.decodeIfPresent(HotkeyMode.self, forKey: .hotkeyMode) ?? .hold
         hasSeenOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboarding) ?? false
         secureLocalModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .secureLocalModeEnabled) ?? false
+        transcriptionBackend = try container.decodeIfPresent(TranscriptionBackend.self, forKey: .transcriptionBackend) ?? .gemini
         selectedLocalTranscriptionModelName = try container.decodeIfPresent(
             String.self,
             forKey: .selectedLocalTranscriptionModelName

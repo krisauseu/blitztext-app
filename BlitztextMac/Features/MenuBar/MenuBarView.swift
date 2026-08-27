@@ -121,16 +121,17 @@ struct MenuBarView: View {
     private var transcriptionModePanel: some View {
         let modelOptions = LocalTranscriptionService.modelOptions()
         let selectedModelInstalled = appState.selectedLocalModelIsInstalled
+        let isGemini = appState.appSettings.transcriptionBackend == .gemini
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Image(systemName: "lock.shield.fill")
+                Image(systemName: isGemini ? "sparkles" : "lock.shield.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(isGemini ? .blue : .green)
                     .frame(width: 22, height: 22)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Lokale Transkription")
+                    Text(isGemini ? "Gemini 3.5 Transcribe" : "Lokale Transkription")
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.primary)
 
@@ -145,22 +146,60 @@ struct MenuBarView: View {
             }
 
             HStack(spacing: 8) {
-                Text("Modell")
+                Text("Methode")
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
 
-                Picker("", selection: Binding(
-                    get: { appState.selectedLocalModelName },
-                    set: { appState.appSettings.selectedLocalTranscriptionModelName = $0 }
-                )) {
-                    ForEach(modelOptions) { model in
-                        Text(model.shortDisplayName).tag(model.id)
+                Picker("", selection: $appState.appSettings.transcriptionBackend) {
+                    ForEach(TranscriptionBackend.allCases) { backend in
+                        Text(backend.displayName).tag(backend)
                     }
                 }
                 .labelsHidden()
                 .frame(maxWidth: .infinity)
                 .controlSize(.small)
-                .disabled(appState.isDownloadingLocalModel)
+            }
+
+            if !isGemini {
+                HStack(spacing: 8) {
+                    Text("Modell")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    Picker("", selection: Binding(
+                        get: { appState.selectedLocalModelName },
+                        set: { appState.appSettings.selectedLocalTranscriptionModelName = $0 }
+                    )) {
+                        ForEach(modelOptions) { model in
+                            Text(model.shortDisplayName).tag(model.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                    .controlSize(.small)
+                    .disabled(appState.isDownloadingLocalModel)
+                }
+
+                if let progress = appState.localModelDownloadProgress {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ProgressView(value: progress)
+                        Text(appState.localModelDownloadStatusText ?? "Modell wird geladen...")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
+                } else if !selectedModelInstalled {
+                    Button(appState.localModelDownloadButtonTitle) {
+                        appState.installSelectedLocalModel()
+                    }
+                    .controlSize(.small)
+                }
+
+                if let errorText = appState.localModelDownloadErrorText {
+                    Text(errorText)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             HStack(spacing: 8) {
@@ -177,27 +216,6 @@ struct MenuBarView: View {
                 .frame(maxWidth: .infinity)
                 .controlSize(.small)
             }
-
-            if let progress = appState.localModelDownloadProgress {
-                VStack(alignment: .leading, spacing: 4) {
-                    ProgressView(value: progress)
-                    Text(appState.localModelDownloadStatusText ?? "Modell wird geladen...")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                }
-            } else if !selectedModelInstalled {
-                Button(appState.localModelDownloadButtonTitle) {
-                    appState.installSelectedLocalModel()
-                }
-                .controlSize(.small)
-            }
-
-            if let errorText = appState.localModelDownloadErrorText {
-                Text(errorText)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .padding(10)
         .background(
@@ -211,11 +229,17 @@ struct MenuBarView: View {
     }
 
     private func modePanelSubtitle(selectedModelInstalled: Bool) -> String {
+        if appState.appSettings.transcriptionBackend == .gemini {
+            return appState.hasValue(for: .geminiAPIKey)
+                ? "Online-Transkription mit Gemini 3.5 Transcribe."
+                : "Gemini API Key fehlt noch in den Einstellungen."
+        }
+
         if appState.isDownloadingLocalModel {
             return appState.localModelDownloadStatusText ?? "Lokales Modell wird geladen."
         }
         if selectedModelInstalled {
-            return "Audio bleibt lokal. API-Funktionen senden nur Text."
+            return "Audio bleibt lokal auf diesem Mac."
         }
         return "\(appState.selectedLocalModelDisplayName) ist noch nicht installiert."
     }

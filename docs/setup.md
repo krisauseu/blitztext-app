@@ -8,8 +8,9 @@ This guide is for people who want to build and inspect the preview themselves.
 - Full Xcode, with Command Line Tools installed
 - XcodeGen
 - Homebrew, if you want to install XcodeGen with `brew install xcodegen`
-- Optional for online workflows: an OpenAI API key
-- Optional for secure local transcription: a local WhisperKit/CoreML model
+- Optional for online transcription: a Google Gemini API key (`gemini-3.5-transcribe`)
+- Optional for rewriting/translation workflows: an OpenAI API key (`gpt-4o-mini`)
+- Optional for offline transcription: a local WhisperKit/CoreML model
 
 Install XcodeGen manually if needed:
 
@@ -31,21 +32,18 @@ To launch after building:
 ./build.sh --run
 ```
 
-## 3. Configure OpenAI For Online Workflows
+## 3. Configure API Keys
 
-Open the app settings and paste your own OpenAI API key if you want online transcription or rewriting workflows.
+Open the app settings (Tab **Zugang**) to configure your API keys:
 
-The preview currently uses:
+- **Gemini API Key**: Used for online transcription via Google's `gemini-3.5-transcribe` model.
+- **OpenAI API Key**: Used for text transformation workflows (Blitztext+, Translation, and Emojis).
 
-- `whisper-1` for transcription
-- `gpt-4o-mini` for lightweight rewriting
-- `gpt-4o` for the calmer-message workflow
+You are responsible for API access, billing, and data handling in your own provider accounts.
 
-You are responsible for API access, billing, and data handling in your own OpenAI account.
+Never commit your API keys into this repository, issues, logs, or screenshots.
 
-Never commit your API key into this repository, issues, logs, or screenshots.
-
-You can skip this step if you only want to test local transcription with a local WhisperKit model.
+You can skip online transcription if you use local transcription with a local WhisperKit model.
 
 ## 4. Optional Local Transcription
 

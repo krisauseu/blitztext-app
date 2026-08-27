@@ -62,18 +62,22 @@ private struct SectionLabel: View {
 // MARK: - Access Settings (Tab 1: Zugang)
 
 struct AccessSettingsView: View {
+    private static let geminiAPIKeyPattern = #"^[A-Za-z0-9_-]{16,}$"#
     private static let openAIAPIKeyPattern = #"^sk-[A-Za-z0-9_-]{20,}$"#
 
     @Bindable var appState: AppState
 
     private enum FieldFocus {
+        case geminiAPIKey
         case openAIAPIKey
     }
 
     @State private var launchAtLoginService = LaunchAtLoginService()
     @State private var currentInstallLocation = BlitztextInstallLocationService.currentInstallLocation
+    @State private var geminiAPIKey = ""
+    @State private var editingGeminiAPIKey = false
     @State private var openAIAPIKey = ""
-    @State private var editingAPIKey = false
+    @State private var editingOpenAIAPIKey = false
     @State private var saved = false
     @State private var saveErrorText: String?
     @State private var installActionErrorText: String?
@@ -119,19 +123,75 @@ struct AccessSettingsView: View {
                 }
             }
 
+            // MARK: - Gemini API Key
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    SectionLabel(text: "OpenAI API Key")
+                    SectionLabel(text: "Gemini API Key (Transkribierung)")
                     Spacer()
-                    if appState.hasValue(for: .openAIAPIKey) && !editingAPIKey {
-                        Button("Aendern") { editingAPIKey = true }
+                    if appState.hasValue(for: .geminiAPIKey) && !editingGeminiAPIKey {
+                        Button("Ändern") { editingGeminiAPIKey = true }
                             .font(.system(size: 10, weight: .medium))
                             .buttonStyle(.plain)
                             .foregroundStyle(.blue)
                     }
                 }
 
-                if appState.hasValue(for: .openAIAPIKey) && !editingAPIKey {
+                if appState.hasValue(for: .geminiAPIKey) && !editingGeminiAPIKey {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.green.opacity(0.8))
+                        Text(appState.apiKeyDisplayValue(for: .geminiAPIKey))
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                    )
+                } else {
+                    HStack(spacing: 8) {
+                        SecureField("AIza...", text: $geminiAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11.5))
+                            .focused($focusedField, equals: .geminiAPIKey)
+                            .onSubmit {
+                                saveGeminiAPIKeyFromField()
+                            }
+
+                        Button(geminiAPIKeyActionTitle) {
+                            if geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                pasteGeminiAPIKeyFromClipboard()
+                            } else {
+                                saveGeminiAPIKeyFromField()
+                            }
+                        }
+                        .buttonStyle(SubtleButtonStyle())
+                    }
+                }
+
+                Text("Für die Online-Transkribierung über Gemini 3.5 Transcribe. Der Key bleibt sicher im macOS Keychain.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // MARK: - OpenAI API Key
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    SectionLabel(text: "OpenAI API Key (Blitztext+, Translation, Emojis)")
+                    Spacer()
+                    if appState.hasValue(for: .openAIAPIKey) && !editingOpenAIAPIKey {
+                        Button("Ändern") { editingOpenAIAPIKey = true }
+                            .font(.system(size: 10, weight: .medium))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+                if appState.hasValue(for: .openAIAPIKey) && !editingOpenAIAPIKey {
                     HStack(spacing: 6) {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 9))
@@ -153,21 +213,21 @@ struct AccessSettingsView: View {
                             .font(.system(size: 11.5))
                             .focused($focusedField, equals: .openAIAPIKey)
                             .onSubmit {
-                                saveAPIKeyFromField()
+                                saveOpenAIAPIKeyFromField()
                             }
 
-                        Button(apiKeyActionTitle) {
+                        Button(openAIAPIKeyActionTitle) {
                             if openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                pasteAPIKeyFromClipboard()
+                                pasteOpenAIAPIKeyFromClipboard()
                             } else {
-                                saveAPIKeyFromField()
+                                saveOpenAIAPIKeyFromField()
                             }
                         }
                         .buttonStyle(SubtleButtonStyle())
                     }
                 }
 
-                Text("Dein Key bleibt lokal in dieser App. Audio und Text werden direkt an die OpenAI API gesendet.")
+                Text("Wird für Textoptimierung, Übersetzung und Emojis verwendet. Der Key bleibt sicher im macOS Keychain.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -373,20 +433,30 @@ struct AccessSettingsView: View {
             launchAtLoginService.refresh()
             refreshInstallState()
             load()
-            if !appState.hasValue(for: .openAIAPIKey) {
-                editingAPIKey = true
+            if !appState.hasValue(for: .geminiAPIKey) {
+                editingGeminiAPIKey = true
+                focusedField = .geminiAPIKey
+            } else if !appState.hasValue(for: .openAIAPIKey) {
+                editingOpenAIAPIKey = true
                 focusedField = .openAIAPIKey
             }
         }
     }
 
     private func load() {
+        geminiAPIKey = ""
         openAIAPIKey = ""
     }
 
-    private var apiKeyActionTitle: String {
+    private var geminiAPIKeyActionTitle: String {
+        geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Einfügen"
+            : "Speichern"
+    }
+
+    private var openAIAPIKeyActionTitle: String {
         openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Einfuegen"
+            ? "Einfügen"
             : "Speichern"
     }
 
@@ -395,29 +465,81 @@ struct AccessSettingsView: View {
         cleanupStatusText = nil
         cleanupErrorText = nil
         KeychainService.invalidateCache()
-        let trimmedAPIKey = openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if editingAPIKey || !appState.hasValue(for: .openAIAPIKey) {
-            guard saveAPIKey(trimmedAPIKey) else {
-                return
-            }
+        var hasSavedSomething = false
+
+        let trimmedGemini = geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if editingGeminiAPIKey && !trimmedGemini.isEmpty {
+            guard saveGeminiAPIKey(trimmedGemini) else { return }
+            hasSavedSomething = true
         }
 
-        showSavedConfirmation()
+        let trimmedOpenAI = openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if editingOpenAIAPIKey && !trimmedOpenAI.isEmpty {
+            guard saveOpenAIAPIKey(trimmedOpenAI) else { return }
+            hasSavedSomething = true
+        }
+
+        if hasSavedSomething || (appState.hasValue(for: .geminiAPIKey) || appState.hasValue(for: .openAIAPIKey)) {
+            showSavedConfirmation()
+        }
     }
 
-    private func saveAPIKeyFromField() {
+    private func saveGeminiAPIKeyFromField() {
         saveErrorText = nil
         cleanupStatusText = nil
         cleanupErrorText = nil
-        guard saveAPIKey(openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+        guard saveGeminiAPIKey(geminiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return
+        }
+        showSavedConfirmation()
+    }
+
+    private func saveOpenAIAPIKeyFromField() {
+        saveErrorText = nil
+        cleanupStatusText = nil
+        cleanupErrorText = nil
+        guard saveOpenAIAPIKey(openAIAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return
         }
         showSavedConfirmation()
     }
 
     @discardableResult
-    private func saveAPIKey(_ trimmedAPIKey: String) -> Bool {
+    private func saveGeminiAPIKey(_ trimmedAPIKey: String) -> Bool {
+        guard !trimmedAPIKey.isEmpty else {
+            saveErrorText = "Bitte trage deinen Gemini API Key ein."
+            return false
+        }
+
+        guard trimmedAPIKey.range(of: Self.geminiAPIKeyPattern, options: .regularExpression) != nil else {
+            saveErrorText = "Bitte trage einen plausiblen Gemini API Key ein."
+            return false
+        }
+
+        do {
+            try KeychainService.save(key: .geminiAPIKey, value: trimmedAPIKey)
+        } catch {
+            saveErrorText = "Gemini API Key konnte nicht gespeichert werden."
+            return false
+        }
+
+        KeychainService.invalidateCache()
+        appState.refreshCredentialStatus()
+        guard appState.hasValue(for: .geminiAPIKey) else {
+            saveErrorText = "Gemini API Key wurde nicht persistent gespeichert. Bitte App neu starten und erneut versuchen."
+            return false
+        }
+
+        geminiAPIKey = ""
+        editingGeminiAPIKey = false
+        focusedField = nil
+        saveErrorText = nil
+        return true
+    }
+
+    @discardableResult
+    private func saveOpenAIAPIKey(_ trimmedAPIKey: String) -> Bool {
         guard !trimmedAPIKey.isEmpty else {
             saveErrorText = "Bitte trage deinen OpenAI API Key ein."
             return false
@@ -443,7 +565,7 @@ struct AccessSettingsView: View {
         }
 
         openAIAPIKey = ""
-        editingAPIKey = false
+        editingOpenAIAPIKey = false
         focusedField = nil
         saveErrorText = nil
         return true
@@ -456,7 +578,27 @@ struct AccessSettingsView: View {
         }
     }
 
-    private func pasteAPIKeyFromClipboard() {
+    private func pasteGeminiAPIKeyFromClipboard() {
+        guard let rawText = NSPasteboard.general.string(forType: .string) else {
+            saveErrorText = "Zwischenablage enthält keinen Text."
+            return
+        }
+
+        let firstLine = rawText.components(separatedBy: .newlines).first ?? rawText
+        let trimmedKey = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedKey.range(of: Self.geminiAPIKeyPattern, options: .regularExpression) != nil else {
+            saveErrorText = "Zwischenablage enthält keinen plausiblen Gemini API Key."
+            return
+        }
+
+        guard saveGeminiAPIKey(trimmedKey) else {
+            return
+        }
+        NSPasteboard.general.clearContents()
+        showSavedConfirmation()
+    }
+
+    private func pasteOpenAIAPIKeyFromClipboard() {
         guard let rawText = NSPasteboard.general.string(forType: .string) else {
             saveErrorText = "Zwischenablage enthält keinen Text."
             return
@@ -469,7 +611,7 @@ struct AccessSettingsView: View {
             return
         }
 
-        guard saveAPIKey(trimmedKey) else {
+        guard saveOpenAIAPIKey(trimmedKey) else {
             return
         }
         NSPasteboard.general.clearContents()
@@ -533,8 +675,10 @@ struct AccessSettingsView: View {
         refreshInstallState()
 
         if deleteLocalDataOnCleanup {
+            geminiAPIKey = ""
+            editingGeminiAPIKey = true
             openAIAPIKey = ""
-            editingAPIKey = true
+            editingOpenAIAPIKey = true
         }
         appState.refreshCredentialStatus()
 
@@ -580,63 +724,88 @@ struct CustomizeSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
 
-            // MARK: Lokale Transkription
+            // MARK: Transkription
             VStack(alignment: .leading, spacing: 10) {
-                SectionLabel(text: "Lokale Transkription")
+                SectionLabel(text: "Transkription")
 
-                HStack(spacing: 6) {
-                    Image(systemName: appState.selectedLocalModelIsInstalled ? "checkmark.circle.fill" : "arrow.down.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(appState.selectedLocalModelIsInstalled ? .green : .blue)
-                    Text(appState.selectedLocalModelIsInstalled ? "\(installedLocalModels.count) lokales WhisperKit-Modell installiert." : "Das ausgewählte Modell wird beim Installieren lokal gespeichert.")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-
-                HStack(spacing: 8) {
-                    Text("Lokales Modell")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Methode")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                    Picker("", selection: Binding(
-                        get: { appState.selectedLocalModelName },
-                        set: { appState.appSettings.selectedLocalTranscriptionModelName = $0 }
-                    )) {
-                        ForEach(localModelOptions) { model in
-                            Text("\(model.displayName) · \(model.installStateLabel)").tag(model.id)
+                    Picker("", selection: $appState.appSettings.transcriptionBackend) {
+                        ForEach(TranscriptionBackend.allCases) { backend in
+                            Text(backend.displayName).tag(backend)
                         }
                     }
-                    .labelsHidden()
-                    .controlSize(.small)
-                    .disabled(appState.isDownloadingLocalModel)
+                    .pickerStyle(.segmented)
                 }
 
-                if let progress = appState.localModelDownloadProgress {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ProgressView(value: progress)
-                        Text(appState.localModelDownloadStatusText ?? "Modell wird geladen...")
+                if appState.appSettings.transcriptionBackend == .gemini {
+                    HStack(spacing: 6) {
+                        Image(systemName: appState.hasValue(for: .geminiAPIKey) ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(appState.hasValue(for: .geminiAPIKey) ? .green : .orange)
+                        Text(appState.hasValue(for: .geminiAPIKey) ? "Gemini 3.5 Transcribe (Cloud API) ist einsatzbereit." : "Gemini API Key fehlt im Tab 'Zugang'.")
                             .font(.system(size: 10.5))
                             .foregroundStyle(.secondary)
+                        Spacer()
                     }
                 } else {
-                    HStack(spacing: 10) {
-                        Button(appState.localModelDownloadButtonTitle) {
-                            appState.installSelectedLocalModel()
-                        }
-                        .controlSize(.small)
-                        .disabled(appState.selectedLocalModelIsInstalled)
-
-                        Link("Modellseite", destination: LocalTranscriptionService.modelPageURL(for: appState.selectedLocalModelName))
-                            .font(.system(size: 10.5, weight: .medium))
+                    HStack(spacing: 6) {
+                        Image(systemName: appState.selectedLocalModelIsInstalled ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(appState.selectedLocalModelIsInstalled ? .green : .blue)
+                        Text(appState.selectedLocalModelIsInstalled ? "\(installedLocalModels.count) lokales WhisperKit-Modell installiert." : "Das ausgewählte Modell wird beim Installieren lokal gespeichert.")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                        Spacer()
                     }
-                }
 
-                if let errorText = appState.localModelDownloadErrorText {
-                    Text(errorText)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) {
+                        Text("Lokales Modell")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+
+                        Picker("", selection: Binding(
+                            get: { appState.selectedLocalModelName },
+                            set: { appState.appSettings.selectedLocalTranscriptionModelName = $0 }
+                        )) {
+                            ForEach(localModelOptions) { model in
+                                Text("\(model.displayName) · \(model.installStateLabel)").tag(model.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .disabled(appState.isDownloadingLocalModel)
+                    }
+
+                    if let progress = appState.localModelDownloadProgress {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ProgressView(value: progress)
+                            Text(appState.localModelDownloadStatusText ?? "Modell wird geladen...")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        HStack(spacing: 10) {
+                            Button(appState.localModelDownloadButtonTitle) {
+                                appState.installSelectedLocalModel()
+                            }
+                            .controlSize(.small)
+                            .disabled(appState.selectedLocalModelIsInstalled)
+
+                            Link("Modellseite", destination: LocalTranscriptionService.modelPageURL(for: appState.selectedLocalModelName))
+                                .font(.system(size: 10.5, weight: .medium))
+                        }
+                    }
+
+                    if let errorText = appState.localModelDownloadErrorText {
+                        Text(errorText)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 

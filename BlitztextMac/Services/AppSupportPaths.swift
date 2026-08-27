@@ -13,6 +13,10 @@ enum AppSupportPaths {
         appSupportDirectoryURL.appendingPathComponent("settings.json")
     }
 
+    static var credentialsURL: URL {
+        appSupportDirectoryURL.appendingPathComponent("credentials.json")
+    }
+
     static var localModelsDirectoryURL: URL {
         appSupportDirectoryURL.appendingPathComponent("models", isDirectory: true)
     }

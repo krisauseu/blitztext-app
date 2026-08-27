@@ -11,26 +11,83 @@ enum TranscriptionError: LocalizedError {
         case .noFile:
             return "Keine Audio-Datei gefunden"
         case .notConfigured:
-            return "OpenAI API Key fehlt. Bitte in den Einstellungen hinterlegen."
+            return "Gemini API Key fehlt. Bitte in den Einstellungen hinterlegen."
         case .networkError(let msg):
             return "Netzwerkfehler: \(msg)"
         case .apiError(let msg):
-            return "OpenAI-Fehler: \(msg)"
+            return "Gemini-Fehler: \(msg)"
         }
     }
 }
 
-private struct TranscriptionOpenAIErrorResponse: Decodable {
+private struct GeminiInteractionRequest: Encodable {
+    struct InputItem: Encodable {
+        let type: String
+        let data: String
+        let mime_type: String
+    }
+
+    struct GenerationConfig: Encodable {
+        struct TranscriptionConfig: Encodable {
+            struct Mode: Encodable {
+                let type: String
+            }
+            let mode: Mode?
+            let language_codes: [String]?
+            let custom_vocabulary: [String]?
+        }
+        let transcription_config: TranscriptionConfig?
+    }
+
+    let model: String
+    let input: [InputItem]
+    let generation_config: GenerationConfig?
+}
+
+private struct GeminiInteractionResponse: Decodable {
+    struct Step: Decodable {
+        struct Content: Decodable {
+            let type: String?
+            let text: String?
+        }
+        let type: String?
+        let content: [Content]?
+    }
+
+    let steps: [Step]?
+    let output_text: String?
+
+    var extractedTranscript: String? {
+        if let output_text, !output_text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return output_text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        guard let steps else { return nil }
+        let textParts = steps
+            .compactMap { $0.content }
+            .flatMap { $0 }
+            .compactMap { $0.text }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let combined = textParts.joined(separator: "\n")
+        return combined.isEmpty ? nil : combined
+    }
+}
+
+private struct GeminiErrorResponse: Decodable {
     struct APIError: Decodable {
+        let code: Int?
         let message: String?
+        let status: String?
     }
 
     let error: APIError?
 }
 
 enum TranscriptionService {
-    private static let remoteModel = "whisper-1"
-    private static let transcriptionsURL = URL(string: "https://api.openai.com/v1/audio/transcriptions")!
+    static let remoteModel = "gemini-3.5-transcribe"
+    private static let interactionsURL = URL(string: "https://generativelanguage.googleapis.com/v1beta/interactions")!
 
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -46,7 +103,7 @@ enum TranscriptionService {
         customTerms: [String] = [],
         language: String? = nil
     ) async throws -> String {
-        guard let apiKey = KeychainService.load(key: .openAIAPIKey) else {
+        guard let apiKey = KeychainService.load(key: .geminiAPIKey) else {
             throw TranscriptionError.notConfigured
         }
 
@@ -55,64 +112,65 @@ enum TranscriptionService {
                 try? FileManager.default.removeItem(at: audioURL)
             }
 
-            let boundary = UUID().uuidString
-            var request = URLRequest(url: transcriptionsURL)
-            request.httpMethod = "POST"
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            request.setValue("text/plain, application/json", forHTTPHeaderField: "Accept")
-            request.timeoutInterval = 60
-            request.cachePolicy = .reloadIgnoringLocalCacheData
+            guard FileManager.default.fileExists(atPath: audioURL.path) else {
+                throw TranscriptionError.noFile
+            }
 
             let audioData = try Data(contentsOf: audioURL, options: [.mappedIfSafe])
+            let base64Audio = audioData.base64EncodedString()
 
-            var body = Data()
-            body.append("--\(boundary)\r\n")
-            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.m4a\"\r\n")
-            body.append("Content-Type: audio/m4a\r\n\r\n")
-            body.append(audioData)
-            body.append("\r\n")
-
-            body.append("--\(boundary)\r\n")
-            body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n")
-            body.append(remoteModel)
-            body.append("\r\n")
-
-            body.append("--\(boundary)\r\n")
-            body.append("Content-Disposition: form-data; name=\"response_format\"\r\n\r\n")
-            body.append("text")
-            body.append("\r\n")
-
-            if !customTerms.isEmpty {
-                let prompt = "Eigennamen und Begriffe: \(customTerms.joined(separator: ", "))"
-                body.append("--\(boundary)\r\n")
-                body.append("Content-Disposition: form-data; name=\"prompt\"\r\n\r\n")
-                body.append(prompt)
-                body.append("\r\n")
+            let trimmedLanguage = language?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let languageCodes: [String]
+            if let trimmedLanguage, !trimmedLanguage.isEmpty {
+                languageCodes = [normalizeLanguageCode(trimmedLanguage)]
+            } else {
+                languageCodes = []
             }
 
-            if let language, !language.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                body.append("--\(boundary)\r\n")
-                body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
-                body.append(language.trimmingCharacters(in: .whitespacesAndNewlines))
-                body.append("\r\n")
-            }
+            let customVocabulary = customTerms
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
 
-            body.append("--\(boundary)--\r\n")
-            request.httpBody = body
+            let transcriptionConfig = GeminiInteractionRequest.GenerationConfig.TranscriptionConfig(
+                mode: .init(type: "verbatim"),
+                language_codes: languageCodes,
+                custom_vocabulary: customVocabulary.isEmpty ? nil : customVocabulary
+            )
+
+            let payload = GeminiInteractionRequest(
+                model: remoteModel,
+                input: [
+                    .init(
+                        type: "audio",
+                        data: base64Audio,
+                        mime_type: "audio/m4a"
+                    )
+                ],
+                generation_config: .init(transcription_config: transcriptionConfig)
+            )
+
+            var request = URLRequest(url: interactionsURL)
+            request.httpMethod = "POST"
+            request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.timeoutInterval = 60
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.httpBody = try JSONEncoder().encode(payload)
 
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw TranscriptionError.networkError("Ungueltige Antwort")
+                throw TranscriptionError.networkError("Ungültige Antwort")
             }
 
             guard httpResponse.statusCode == 200 else {
-                throw TranscriptionError.apiError(openAIErrorMessage(from: data) ?? "Status \(httpResponse.statusCode)")
+                throw TranscriptionError.apiError(geminiErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)")
             }
 
-            guard let text = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            let interactionResponse = try JSONDecoder().decode(GeminiInteractionResponse.self, from: data)
+
+            guard let text = interactionResponse.extractedTranscript,
                   !text.isEmpty else {
                 throw TranscriptionError.apiError("Transkription fehlgeschlagen")
             }
@@ -121,15 +179,25 @@ enum TranscriptionService {
         }.value
     }
 
-    private static func openAIErrorMessage(from data: Data) -> String? {
-        (try? JSONDecoder().decode(TranscriptionOpenAIErrorResponse.self, from: data))?.error?.message
+    private static func geminiErrorMessage(from data: Data) -> String? {
+        if let errorObj = try? JSONDecoder().decode(GeminiErrorResponse.self, from: data),
+           let message = errorObj.error?.message, !message.isEmpty {
+            return message
+        }
+        if let plainText = String(data: data, encoding: .utf8), !plainText.isEmpty {
+            return plainText
+        }
+        return nil
     }
-}
 
-private extension Data {
-    mutating func append(_ string: String) {
-        if let data = string.data(using: .utf8) {
-            append(data)
+    private static func normalizeLanguageCode(_ lang: String) -> String {
+        switch lang.lowercased() {
+        case "de": return "de-DE"
+        case "en": return "en-US"
+        case "fr": return "fr-FR"
+        case "es": return "es-ES"
+        case "it": return "it-IT"
+        default: return lang
         }
     }
 }

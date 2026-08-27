@@ -20,17 +20,23 @@ final class TranscriptionWorkflow: Workflow {
     var onPhaseChange: WorkflowPhaseChangeHandler?
 
     private let recorder = AudioRecorder()
+    private let customTerms: [String]
     private let language: String
+    private let backend: TranscriptionBackend
     private let localModelName: String
     private var transcriptionTask: Task<Void, Never>?
 
     init(
         type: WorkflowType = .transcription,
+        customTerms: [String] = [],
         language: String = "",
+        backend: TranscriptionBackend = .gemini,
         localModelName: String = LocalTranscriptionService.recommendedFastModelName
     ) {
         self.type = type
+        self.customTerms = customTerms
         self.language = language
+        self.backend = backend
         self.localModelName = localModelName
     }
 
@@ -76,8 +82,9 @@ final class TranscriptionWorkflow: Workflow {
             return
         }
 
-        phase = .running("Wird lokal transkribiert ...")
+        phase = .running(backend == .local ? "Wird lokal transkribiert ..." : "Wird transkribiert ...")
         let recordingDuration = recorder.lastRecordingDuration
+        let vocabularyHints = recordingDuration >= 0.9 ? customTerms : []
         let requestLanguage = language
         let stopTime = Date()
 
@@ -88,11 +95,21 @@ final class TranscriptionWorkflow: Workflow {
 
             let requestStart = Date()
             do {
-                let text = try await LocalTranscriptionService.shared.transcribe(
-                    audioURL: url,
-                    language: requestLanguage,
-                    modelName: localModelName
-                )
+                let text: String
+                switch backend {
+                case .gemini:
+                    text = try await TranscriptionService.transcribe(
+                        audioURL: url,
+                        customTerms: vocabularyHints,
+                        language: requestLanguage
+                    )
+                case .local:
+                    text = try await LocalTranscriptionService.shared.transcribe(
+                        audioURL: url,
+                        language: requestLanguage,
+                        modelName: localModelName
+                    )
+                }
                 try Task.checkCancellation()
 
                 let responseReceivedAt = Date()

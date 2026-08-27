@@ -15,16 +15,19 @@ final class EmojiTextWorkflow: Workflow {
     private let recorder = AudioRecorder()
     private let settings: EmojiTextSettings
     private let language: String
+    private let backend: TranscriptionBackend
     private let localModelName: String
     private var processingTask: Task<Void, Never>?
 
     init(
         settings: EmojiTextSettings,
         language: String = "",
+        backend: TranscriptionBackend = .gemini,
         localModelName: String = LocalTranscriptionService.recommendedFastModelName
     ) {
         self.settings = settings
         self.language = language
+        self.backend = backend
         self.localModelName = localModelName
     }
 
@@ -36,7 +39,7 @@ final class EmojiTextWorkflow: Workflow {
     // MARK: - Workflow Protocol
 
     func start() {
-        phase = .running("Aufnahme l\u{00E4}uft ...")
+        phase = .running("Aufnahme läuft ...")
         recorder.startRecording()
 
         if let error = recorder.errorMessage {
@@ -68,7 +71,7 @@ final class EmojiTextWorkflow: Workflow {
         phase = .idle
     }
 
-    // MARK: - Two-Phase Processing: Whisper -> Emoji
+    // MARK: - Two-Phase Processing: Transcription -> Emoji
 
     private func processRecording() {
         guard let url = recorder.recordingURL else {
@@ -76,8 +79,9 @@ final class EmojiTextWorkflow: Workflow {
             return
         }
 
-        phase = .running("Wird transkribiert ...")
+        phase = .running(backend == .local ? "Wird lokal transkribiert ..." : "Wird transkribiert ...")
         let recordingDuration = recorder.lastRecordingDuration
+        let requestLanguage = language
 
         processingTask = Task {
             defer {
@@ -85,11 +89,21 @@ final class EmojiTextWorkflow: Workflow {
             }
 
             do {
-                let rawText = try await LocalTranscriptionService.shared.transcribe(
-                    audioURL: url,
-                    language: language,
-                    modelName: localModelName
-                )
+                let rawText: String
+                switch backend {
+                case .gemini:
+                    rawText = try await TranscriptionService.transcribe(
+                        audioURL: url,
+                        language: requestLanguage
+                    )
+                case .local:
+                    rawText = try await LocalTranscriptionService.shared.transcribe(
+                        audioURL: url,
+                        language: requestLanguage,
+                        modelName: localModelName
+                    )
+                }
+
                 let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
                     phase = .error("Keine Aufnahme erkannt.")
@@ -99,7 +113,7 @@ final class EmojiTextWorkflow: Workflow {
                 if Task.isCancelled { return }
 
                 // Phase 2: Add emojis
-                phase = .running("Emojis werden eingef\u{00FC}gt ...")
+                phase = .running("Emojis werden eingefügt ...")
 
                 let result = try await LLMService.addEmojis(
                     text: cleanedRawText,

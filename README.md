@@ -1,29 +1,25 @@
-# Blitztext App (Offline-First Fork)
+# Blitztext App
 
-This is a modified fork of the original [Blitztext App by cmagnussen](https://github.com/cmagnussen/blitztext-app). 
+This is a modified fork of the [Blitztext App](https://github.com/cmagnussen/blitztext-app). 
 
-In this version, **all speech transcription has been moved entirely offline** to maximize speed and eliminate API latency on Apple Silicon Macs. The optional OpenAI API is now exclusively used for smart text transformations and translations.
-
-## What It Does
-
-- **Blitztext**: Record speech and transcribe it 100% locally using WhisperKit/CoreML.
-- **Blitztext+**: Record speech, transcribe it locally, then use an LLM API to clean up the rough draft.
-- **Blitztext Translate (New)**: Record speech, transcribe it locally, and instantly translate it into a target language of your choice (e.g., Norwegian, French, Spanish, etc.) via API before pasting.
+In this version, **speech transcription** is powered by Google's brand new **Gemini 3.5 Transcribe** (`gemini-3.5-transcribe`) API for lightning-fast and accurate cloud transcription, with full support for optional **100% offline transcription** via WhisperKit / CoreML on Apple Silicon Macs. Text improvement, translation, and emoji workflows use the OpenAI API.
 
 ## What It Does
 
-- **Blitztext**: record speech and transcribe it.
-- **Blitztext+**: record speech, transcribe it, then turn the rough draft into cleaner writing.
-- **Blitztext Translate**: Record speech, transcribe it locally, and instantly translate it into a target language via the OpenAI API. You can select the destination language directly from the menu bar dropdown before triggering the workflow.
-- **Blitztext :)**: add fitting emojis to dictated text.
+- **Blitztext**: Record speech and transcribe it using Google **Gemini 3.5 Transcribe** or locally via **WhisperKit**.
+- **Blitztext Lokal**: Record speech and transcribe it 100% locally on-device without any internet connection.
+- **Blitztext+**: Record speech, transcribe it, then refine and improve the text via LLM.
+- **Blitztext Translate**: Record speech, transcribe it, and instantly translate it into a target language of your choice (e.g., Norwegian, French, Spanish, German, English).
+- **Blitztext :)**: Add fitting emojis to transcribed text.
 
 ## Important Preview Notes
 
 - macOS only (optimized for Apple Silicon M-series chips).
-- **100% Local Transcription:** Audio transcription is exclusively performed on-device using WhisperKit/CoreML. No audio data or raw transcriptions are sent to OpenAI for the base workflow.
-- **Optional API Features:** An OpenAI API key is only required if you use the advanced workflows (Blitztext+ or the Translator).
-- `./build.sh` creates a locally ad-hoc-signed development app.- Not production ready.
-- No warranty and no support guarantee.
+- **Gemini 3.5 Transcribe:** Uses Google's state-of-the-art `gemini-3.5-transcribe` model for high-accuracy speech-to-text.
+- **Optional Local Mode:** On-device WhisperKit transcription is always available for 100% private offline dictation.
+- **API Keys:** Stored locally in user-protected application storage (`~/Library/Application Support/Blitztext/credentials.json`, mode `0600`), not in the system keychain, avoiding repetitive macOS keychain prompts across development builds.
+- `./build.sh` creates a locally ad-hoc-signed development app.
+- Not production ready. No warranty and no support guarantee.
 
 You are welcome to use, fork, adapt, and share this project under the license terms.
 
@@ -92,13 +88,15 @@ If you do not grant Accessibility permission, you can still copy results manuall
 
 Full Disk Access is not required. If auto-paste does not work even though transcription succeeds, open **System Settings -> Privacy & Security -> Accessibility**, enable Blitztext there, restart Blitztext, and try again with the cursor focused in a text field. If macOS shows multiple Blitztext entries, remove or disable the old ones and grant the permission to the app you just built or installed.
 
-##Data Flow in this Fork:
+## Data Flow
 
-Transcription:        Your Mac (Voice) -> WhisperKit/CoreML (On-Device) -> Local Text
-Text Improvement:     Local Text -> OpenAI Chat Completions API -> Refined Text
-Translation:          Local Text -> OpenAI Chat Completions API -> Translated Text
+- **Transcription (Cloud):** Your Mac (Voice) -> Gemini 3.5 Transcribe API -> Transcribed Text
+- **Transcription (Local):** Your Mac (Voice) -> WhisperKit/CoreML (On-Device) -> Local Text
+- **Text Improvement:** Transcribed Text -> OpenAI Chat Completions API -> Refined Text
+- **Translation:** Transcribed Text -> OpenAI Chat Completions API -> Translated Text
+- **Emoji Enhancement:** Transcribed Text -> OpenAI Chat Completions API -> Text with Emojis
 
-The app stores your OpenAI API key in the user's macOS Keychain.
+The app stores your API keys locally in `~/Library/Application Support/Blitztext/credentials.json` (restricted to mode `0600`, accessible only by your macOS user account). Keys are intentionally not stored in the macOS system keychain to eliminate repetitive authorization dialogs during development and ad-hoc builds.
 
 Read [docs/privacy.md](docs/privacy.md) before using the preview with sensitive content.
 

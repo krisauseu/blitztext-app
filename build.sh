@@ -139,7 +139,7 @@ DEST="$SCRIPT_DIR/Blitztext.app"
 rm -rf "$DEST"
 cp -R "$APP_PATH" "$DEST"
 echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-codesign --force --sign - "$DEST" 2>&1
+codesign --force --deep --sign - --entitlements "$PROJECT_DIR/Resources/BlitztextMac.entitlements" "$DEST" 2>&1
 verify_universal_app "$DEST"
 
 RUN_TARGET="$DEST"
@@ -155,7 +155,7 @@ if [ "$INSTALL_APP" = true ]; then
     rm -rf "$INSTALL_DEST"
     cp -R "$DEST" "$INSTALL_DEST"
     echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
-    codesign --force --sign - "$INSTALL_DEST" 2>&1
+    codesign --force --deep --sign - --entitlements "$PROJECT_DIR/Resources/BlitztextMac.entitlements" "$INSTALL_DEST" 2>&1
     verify_universal_app "$INSTALL_DEST"
     RUN_TARGET="$INSTALL_DEST"
 fi

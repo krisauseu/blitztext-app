@@ -15,16 +15,19 @@ final class TranslationWorkflow: Workflow {
     private let recorder = AudioRecorder()
     private let settings: TranslationSettings
     private let language: String
+    private let backend: TranscriptionBackend
     private let localModelName: String
     private var processingTask: Task<Void, Never>?
 
     init(
         settings: TranslationSettings,
         language: String = "",
+        backend: TranscriptionBackend = .gemini,
         localModelName: String = LocalTranscriptionService.recommendedFastModelName
     ) {
         self.settings = settings
         self.language = language
+        self.backend = backend
         self.localModelName = localModelName
     }
 
@@ -68,7 +71,7 @@ final class TranslationWorkflow: Workflow {
         phase = .idle
     }
 
-    // MARK: - Two-Phase Processing: Local Whisper -> API Translation
+    // MARK: - Two-Phase Processing: Transcription -> API Translation
 
     private func processRecording() {
         guard let url = recorder.recordingURL else {
@@ -76,8 +79,9 @@ final class TranslationWorkflow: Workflow {
             return
         }
 
-        phase = .running("Wird transkribiert ...")
+        phase = .running(backend == .local ? "Wird lokal transkribiert ..." : "Wird transkribiert ...")
         let recordingDuration = recorder.lastRecordingDuration
+        let requestLanguage = language
 
         processingTask = Task {
             defer {
@@ -85,11 +89,21 @@ final class TranslationWorkflow: Workflow {
             }
 
             do {
-                let rawText = try await LocalTranscriptionService.shared.transcribe(
-                    audioURL: url,
-                    language: language,
-                    modelName: localModelName
-                )
+                let rawText: String
+                switch backend {
+                case .gemini:
+                    rawText = try await TranscriptionService.transcribe(
+                        audioURL: url,
+                        language: requestLanguage
+                    )
+                case .local:
+                    rawText = try await LocalTranscriptionService.shared.transcribe(
+                        audioURL: url,
+                        language: requestLanguage,
+                        modelName: localModelName
+                    )
+                }
+
                 let cleanedRawText = TranscriptionQualityService.cleanedTranscript(rawText)
                 guard !TranscriptionQualityService.isLikelyArtifact(cleanedRawText, recordingDuration: recordingDuration) else {
                     phase = .error("Keine Aufnahme erkannt.")

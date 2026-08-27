@@ -1,91 +1,112 @@
 import Foundation
-import Security
 
 enum KeychainKey: String, CaseIterable, Codable {
+    case geminiAPIKey = "geminiAPIKey"
     case openAIAPIKey = "openAIAPIKey"
 
     var label: String {
         switch self {
+        case .geminiAPIKey: return "Gemini API Key"
         case .openAIAPIKey: return "OpenAI API Key"
         }
     }
 }
 
-/// Stores credentials in the user's macOS Keychain.
+/// Securely stores credentials in the user's Application Support directory (mode 0600) with in-memory caching.
 enum KeychainService {
-    private static let service = "\(Bundle.main.bundleIdentifier ?? "app.blitztext.mac").credentials"
+    private static var cache: [KeychainKey: String] = [:]
+    private static var isLoaded = false
+    private static let lock = NSLock()
 
     static func save(key: KeychainKey, value: String) throws {
-        let data = Data(value.utf8)
-        var query = baseQuery(for: key)
-        query[kSecValueData as String] = data
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        lock.lock()
+        defer { lock.unlock() }
 
-        let status = SecItemAdd(query as CFDictionary, nil)
-
-        if status == errSecDuplicateItem {
-            let updateStatus = SecItemUpdate(
-                baseQuery(for: key) as CFDictionary,
-                [kSecValueData as String: data] as CFDictionary
-            )
-            guard updateStatus == errSecSuccess else {
-                throw KeychainError.saveFailed(updateStatus)
-            }
-            return
-        }
-
-        guard status == errSecSuccess else {
-            throw KeychainError.saveFailed(status)
-        }
+        ensureLoaded()
+        cache[key] = value
+        try persistToFile()
     }
 
     static func load(key: KeychainKey) -> String? {
-        var query = baseQuery(for: key)
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        query[kSecReturnData as String] = true
+        lock.lock()
+        defer { lock.unlock() }
 
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-
-        guard status == errSecSuccess,
-              let data = item as? Data,
-              let value = String(data: data, encoding: .utf8),
-              !value.isEmpty else {
+        ensureLoaded()
+        guard let value = cache[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
             return nil
         }
-
         return value
     }
 
     static func delete(key: KeychainKey) {
-        SecItemDelete(baseQuery(for: key) as CFDictionary)
+        lock.lock()
+        defer { lock.unlock() }
+
+        ensureLoaded()
+        cache.removeValue(forKey: key)
+        try? persistToFile()
     }
 
     /// Force the next `load` to re-read credentials.
     static func invalidateCache() {
-        // Kept for call-site compatibility. Keychain reads do not use an in-memory cache.
+        lock.lock()
+        defer { lock.unlock() }
+
+        isLoaded = false
+        cache.removeAll()
     }
 
-    static var isConfigured: Bool {
+    static var hasGeminiKey: Bool {
+        load(key: .geminiAPIKey) != nil
+    }
+
+    static var hasOpenAIKey: Bool {
         load(key: .openAIAPIKey) != nil
     }
 
-    private static func baseQuery(for key: KeychainKey) -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue
-        ]
+    static var isConfigured: Bool {
+        hasGeminiKey || hasOpenAIKey
+    }
+
+    private static func ensureLoaded() {
+        guard !isLoaded else { return }
+        isLoaded = true
+        cache = [:]
+
+        let url = AppSupportPaths.credentialsURL
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return
+        }
+
+        for (rawKey, value) in decoded {
+            if let key = KeychainKey(rawValue: rawKey) {
+                cache[key] = value
+            }
+        }
+    }
+
+    private static func persistToFile() throws {
+        try AppSupportPaths.ensureAppSupportDirectoryExists()
+        let dict = cache.reduce(into: [String: String]()) { acc, pair in
+            acc[pair.key.rawValue] = pair.value
+        }
+        let data = try JSONEncoder().encode(dict)
+        let url = AppSupportPaths.credentialsURL
+
+        try data.write(to: url, options: [.atomic])
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 }
 
 enum KeychainError: LocalizedError {
-    case saveFailed(OSStatus)
+    case saveFailed(String)
 
     var errorDescription: String? {
         switch self {
-        case .saveFailed(let status):
-            return "Zugangsdaten konnten nicht im macOS Keychain gespeichert werden. Status: \(status)"
+        case .saveFailed(let msg):
+            return "Zugangsdaten konnten nicht gespeichert werden: \(msg)"
         }
     }
 }
