@@ -62,9 +62,6 @@ private struct SectionLabel: View {
 // MARK: - Access Settings (Tab 1: Zugang)
 
 struct AccessSettingsView: View {
-    private static let geminiAPIKeyPattern = #"^[A-Za-z0-9_-]{16,}$"#
-    private static let openAIAPIKeyPattern = #"^sk-[A-Za-z0-9_-]{20,}$"#
-
     @Bindable var appState: AppState
 
     private enum FieldFocus {
@@ -129,10 +126,14 @@ struct AccessSettingsView: View {
                     SectionLabel(text: "Gemini API Key (Transkribierung)")
                     Spacer()
                     if appState.hasValue(for: .geminiAPIKey) && !editingGeminiAPIKey {
-                        Button("Ändern") { editingGeminiAPIKey = true }
-                            .font(.system(size: 10, weight: .medium))
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.blue)
+                        Button("Ändern") {
+                            editingGeminiAPIKey = true
+                            focusedField = .geminiAPIKey
+                            saveErrorText = nil
+                        }
+                        .font(.system(size: 10, weight: .medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.blue)
                     }
                 }
 
@@ -172,7 +173,7 @@ struct AccessSettingsView: View {
                     }
                 }
 
-                Text("Für die Online-Transkribierung über Gemini 3.5 Transcribe. Der Key bleibt sicher im macOS Keychain.")
+                Text("Für die Online-Transkribierung über Gemini 3.5 Transcribe. Der Key wird lokal in Application Support gespeichert.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -184,10 +185,14 @@ struct AccessSettingsView: View {
                     SectionLabel(text: "OpenAI API Key (Blitztext+, Translation, Emojis)")
                     Spacer()
                     if appState.hasValue(for: .openAIAPIKey) && !editingOpenAIAPIKey {
-                        Button("Ändern") { editingOpenAIAPIKey = true }
-                            .font(.system(size: 10, weight: .medium))
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.blue)
+                        Button("Ändern") {
+                            editingOpenAIAPIKey = true
+                            focusedField = .openAIAPIKey
+                            saveErrorText = nil
+                        }
+                        .font(.system(size: 10, weight: .medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.blue)
                     }
                 }
 
@@ -227,7 +232,7 @@ struct AccessSettingsView: View {
                     }
                 }
 
-                Text("Wird für Textoptimierung, Übersetzung und Emojis verwendet. Der Key bleibt sicher im macOS Keychain.")
+                Text("Wird für Textoptimierung, Übersetzung und Emojis verwendet. Der Key wird lokal in Application Support gespeichert.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -505,22 +510,37 @@ struct AccessSettingsView: View {
         showSavedConfirmation()
     }
 
+    private static func cleanKeyInput(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if (text.hasPrefix("\"") && text.hasSuffix("\"")) || (text.hasPrefix("'") && text.hasSuffix("'")) {
+            text = String(text.dropFirst().dropLast())
+        }
+        if let eqIndex = text.lastIndex(of: "=") {
+            let candidate = String(text[text.index(after: eqIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if candidate.count >= 8 {
+                text = candidate
+            }
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     @discardableResult
-    private func saveGeminiAPIKey(_ trimmedAPIKey: String) -> Bool {
-        guard !trimmedAPIKey.isEmpty else {
+    private func saveGeminiAPIKey(_ rawAPIKey: String) -> Bool {
+        let cleaned = Self.cleanKeyInput(rawAPIKey)
+        guard !cleaned.isEmpty else {
             saveErrorText = "Bitte trage deinen Gemini API Key ein."
             return false
         }
 
-        guard trimmedAPIKey.range(of: Self.geminiAPIKeyPattern, options: .regularExpression) != nil else {
-            saveErrorText = "Bitte trage einen plausiblen Gemini API Key ein."
+        guard cleaned.count >= 8 else {
+            saveErrorText = "Der eingegebene Gemini API Key ist zu kurz."
             return false
         }
 
         do {
-            try KeychainService.save(key: .geminiAPIKey, value: trimmedAPIKey)
+            try KeychainService.save(key: .geminiAPIKey, value: cleaned)
         } catch {
-            saveErrorText = "Gemini API Key konnte nicht gespeichert werden."
+            saveErrorText = "Gemini API Key konnte nicht gespeichert werden: \(error.localizedDescription)"
             return false
         }
 
@@ -539,21 +559,22 @@ struct AccessSettingsView: View {
     }
 
     @discardableResult
-    private func saveOpenAIAPIKey(_ trimmedAPIKey: String) -> Bool {
-        guard !trimmedAPIKey.isEmpty else {
+    private func saveOpenAIAPIKey(_ rawAPIKey: String) -> Bool {
+        let cleaned = Self.cleanKeyInput(rawAPIKey)
+        guard !cleaned.isEmpty else {
             saveErrorText = "Bitte trage deinen OpenAI API Key ein."
             return false
         }
 
-        guard trimmedAPIKey.range(of: Self.openAIAPIKeyPattern, options: .regularExpression) != nil else {
-            saveErrorText = "Bitte trage einen plausiblen OpenAI API Key ein."
+        guard cleaned.count >= 8 else {
+            saveErrorText = "Der eingegebene OpenAI API Key ist zu kurz."
             return false
         }
 
         do {
-            try KeychainService.save(key: .openAIAPIKey, value: trimmedAPIKey)
+            try KeychainService.save(key: .openAIAPIKey, value: cleaned)
         } catch {
-            saveErrorText = "OpenAI API Key konnte nicht gespeichert werden."
+            saveErrorText = "OpenAI API Key konnte nicht gespeichert werden: \(error.localizedDescription)"
             return false
         }
 
@@ -585,13 +606,13 @@ struct AccessSettingsView: View {
         }
 
         let firstLine = rawText.components(separatedBy: .newlines).first ?? rawText
-        let trimmedKey = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedKey.range(of: Self.geminiAPIKeyPattern, options: .regularExpression) != nil else {
-            saveErrorText = "Zwischenablage enthält keinen plausiblen Gemini API Key."
+        let cleaned = Self.cleanKeyInput(firstLine)
+        guard !cleaned.isEmpty, cleaned.count >= 8 else {
+            saveErrorText = "Zwischenablage enthält keinen gültigen Gemini API Key."
             return
         }
 
-        guard saveGeminiAPIKey(trimmedKey) else {
+        guard saveGeminiAPIKey(cleaned) else {
             return
         }
         NSPasteboard.general.clearContents()
@@ -605,13 +626,13 @@ struct AccessSettingsView: View {
         }
 
         let firstLine = rawText.components(separatedBy: .newlines).first ?? rawText
-        let trimmedKey = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedKey.range(of: Self.openAIAPIKeyPattern, options: .regularExpression) != nil else {
-            saveErrorText = "Zwischenablage enthält keinen plausiblen OpenAI API Key."
+        let cleaned = Self.cleanKeyInput(firstLine)
+        guard !cleaned.isEmpty, cleaned.count >= 8 else {
+            saveErrorText = "Zwischenablage enthält keinen gültigen OpenAI API Key."
             return
         }
 
-        guard saveOpenAIAPIKey(trimmedKey) else {
+        guard saveOpenAIAPIKey(cleaned) else {
             return
         }
         NSPasteboard.general.clearContents()
