@@ -152,6 +152,8 @@ if [ "$INSTALL_APP" = true ]; then
         echo "   Fuehre den Befehl mit passenden Rechten erneut aus oder ziehe die App manuell nach /Applications."
         exit 1
     fi
+    killall Blitztext 2>/dev/null || true
+    sleep 0.5
     rm -rf "$INSTALL_DEST"
     cp -R "$DEST" "$INSTALL_DEST"
     echo "🔏 Signiere lokale Development-App ad-hoc. Dieses Artefakt ist nicht notarisiert."
@@ -171,16 +173,12 @@ echo "Build-Typ: $BUILD_CONFIGURATION"
 echo "Architekturen: $UNIVERSAL_ARCHS"
 echo "Kompatibel: Apple Silicon + Intel (macOS 14+)"
 echo ""
-echo "Naechste Schritte:"
-echo "1. App starten"
-echo "2. Mikrofon erlauben"
-echo "3. Fuer direktes Einfuegen zusaetzlich Bedienungshilfen erlauben"
-echo "4. In Blitztext deinen eigenen OpenAI API Key eintragen"
-echo "5. Loslegen und bei Bedarf im Code weiterbauen"
-echo ""
 
 # Optional: direkt starten
 if [ "$RUN_AFTER" = true ]; then
-    echo "🚀 Starte Blitztext ..."
+    echo "🛑 Beende eventuell laufende alte Instanz ..."
+    killall Blitztext 2>/dev/null || true
+    sleep 0.5
+    echo "🚀 Starte frische Blitztext-App ..."
     open "$RUN_TARGET"
 fi
